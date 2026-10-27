@@ -17,14 +17,29 @@ jobs:
         with:
           arch: amd64
 
+      - name: Download PDFium
+        shell: pwsh
+        run: |
+          $url = "https://github.com/bblanchon/pdfium-binaries/releases/latest/download/pdfium-win-x64.tgz"
+          Invoke-WebRequest -Uri $url -OutFile pdfium.tgz
+          New-Item -ItemType Directory -Force pdfium
+          tar -xzf pdfium.tgz -C pdfium
+
       - name: Compile PDF Reader Pro
         shell: cmd
         run: |
-          cl /nologo /EHsc /std:c++17 /utf-8 main.cpp /Fe:PDFReaderPro.exe user32.lib gdi32.lib comdlg32.lib shell32.lib
+          cl /nologo /EHsc /std:c++17 /utf-8 /O2 /I pdfium\include main.cpp /Fe:PDFReaderPro.exe /link /SUBSYSTEM:WINDOWS pdfium\lib\pdfium.dll.lib user32.lib gdi32.lib comdlg32.lib shell32.lib
 
-      - name: Upload EXE
+      - name: Prepare Portable
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force Portable
+          Copy-Item PDFReaderPro.exe Portable\
+          Copy-Item pdfium\bin\pdfium.dll Portable\
+
+      - name: Upload Portable ZIP
         uses: actions/upload-artifact@v4
         with:
-          name: PDFReaderPro-Windows
-          path: PDFReaderPro.exe
+          name: PDFReaderPro-Windows-x64
+          path: Portable/
           if-no-files-found: error
