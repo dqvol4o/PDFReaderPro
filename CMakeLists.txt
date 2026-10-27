@@ -1,0 +1,13 @@
+cmake_minimum_required(VERSION 3.20)
+project(PDFReaderPro LANGUAGES CXX)
+set(CMAKE_CXX_STANDARD 17)
+if(NOT DEFINED PDFIUM_DIR)
+  message(FATAL_ERROR "Specify PDFIUM_DIR")
+endif()
+find_path(PDFIUM_INCLUDE_DIR fpdfview.h PATHS "${PDFIUM_DIR}/include" NO_DEFAULT_PATH REQUIRED)
+find_library(PDFIUM_LIBRARY NAMES pdfium pdfium.dll PATHS "${PDFIUM_DIR}/lib" NO_DEFAULT_PATH REQUIRED)
+add_executable(PDFReaderPro WIN32 main.cpp)
+target_include_directories(PDFReaderPro PRIVATE "${PDFIUM_INCLUDE_DIR}")
+target_link_libraries(PDFReaderPro PRIVATE "${PDFIUM_LIBRARY}" comdlg32 gdi32 user32 shell32)
+add_custom_command(TARGET PDFReaderPro POST_BUILD
+  COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${PDFIUM_DIR}/bin/pdfium.dll" "$<TARGET_FILE_DIR:PDFReaderPro>/pdfium.dll")
