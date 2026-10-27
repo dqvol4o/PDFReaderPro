@@ -14,8 +14,7 @@ jobs:
 
       - name: Compile PDF Reader Pro
        shell: powershell
-        run: |
-          run: |
+       run: |
   $vs = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -property installationPath
   $vcvars = Join-Path $vs "VC\Auxiliary\Build\vcvars64.bat"
   cmd /c "`"$vcvars`" && cl /nologo /EHsc /std:c++17 /utf-8 main.cpp /Fe:PDFReaderPro.exe user32.lib gdi32.lib comdlg32.lib shell32.lib"
