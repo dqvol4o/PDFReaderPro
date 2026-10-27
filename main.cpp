@@ -55,8 +55,8 @@ void RenderPage(HDC dc, RECT client) {
     double fit=std::min((double)std::max<LONG>(1,area.right-40)/w,(double)std::max<LONG>(1,area.bottom-area.top-40)/h);
     int pw=std::max(1,(int)(w*fit*zoom)),ph=std::max(1,(int)(h*fit*zoom));
     // Render at viewport size only: bounds memory usage for oversized pages.
-    int rw=std::min(pw,std::max<LONG>(1,area.right-20));
-    int rh=std::min(ph,std::max<LONG>(1,area.bottom-area.top-20));
+    int rw=std::min<int>(pw,static_cast<int>(std::max<LONG>(1,area.right-20)));
+    int rh=std::min<int>(ph,static_cast<int>(std::max<LONG>(1,area.bottom-area.top-20)));
     BITMAPINFO bmi={}; bmi.bmiHeader.biSize=sizeof(BITMAPINFOHEADER);
     bmi.bmiHeader.biWidth=rw; bmi.bmiHeader.biHeight=-rh;
     bmi.bmiHeader.biPlanes=1; bmi.bmiHeader.biBitCount=32; bmi.bmiHeader.biCompression=BI_RGB;
