@@ -1,394 +1,45 @@
 
-#define UNICODE
-#define _UNICODE
-#define NOMINMAX
-
-#include <windows.h>
-#include <commdlg.h>
-#include <shellapi.h>
-#include <string>
-#include <algorithm>
-#include "fpdfview.h"
-
-static FPDF_DOCUMENT doc = nullptr;
-static int pageIndex = 0;
-static double zoom = 1.0;
-static std::wstring fileName;
-static HWND mainWindow = nullptr;
-
-static constexpr int ID_OPEN = 100;
-static constexpr int ID_PREV = 101;
-static constexpr int ID_NEXT = 102;
-static constexpr int ID_IN = 103;
-static constexpr int ID_OUT = 104;
-
-void UpdateTitle() {
-    std::wstring title = L"PDF Reader Pro";
-
-    if (doc) {
-        title += L" - " + fileName;
-        title += L" [" + std::to_wstring(pageIndex + 1);
-        title += L"/" + std::to_wstring(FPDF_GetPageCount(doc));
-        title += L"]";
-    }
-
-    SetWindowTextW(mainWindow, title.c_str());
-}
-
-bool LoadPdfPath(const wchar_t* path) {
-    if (!path || !*path) return false;
-
-    int bytes = WideCharToMultiByte(
-        CP_UTF8, 0, path, -1, nullptr, 0, nullptr, nullptr
-    );
-
-    if (bytes <= 0) return false;
-
-    std::string utf8(bytes, '\0');
-
-    WideCharToMultiByte(
-        CP_UTF8, 0, path, -1,
-        utf8.data(), bytes, nullptr, nullptr
-    );
-
-    FPDF_DOCUMENT next = FPDF_LoadDocument(
-        utf8.c_str(), nullptr
-    );
-
-    if (!next) {
-        MessageBoxW(
-            mainWindow,
-            L"Неуспешно отваряне на PDF файла.",
-            L"PDF Reader Pro",
-            MB_OK | MB_ICONERROR
-        );
-        return false;
-    }
-
-    if (doc) FPDF_CloseDocument(doc);
-
-    doc = next;
-    pageIndex = 0;
-    zoom = 1.0;
-    fileName = path;
-
-    UpdateTitle();
-    InvalidateRect(mainWindow, nullptr, TRUE);
-
-    return true;
-}
-
-void OpenDocument() {
-    wchar_t path[32768] = {};
-
-    OPENFILENAMEW ofn = {};
-    ofn.lStructSize = sizeof(ofn);
-    ofn.hwndOwner = mainWindow;
-    ofn.lpstrFile = path;
-    ofn.nMaxFile = 32768;
-    ofn.lpstrFilter =
-        L"PDF файлове\0*.pdf\0"
-        L"Всички файлове\0*.*\0";
-    ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST;
-
-    if (GetOpenFileNameW(&ofn)) {
-        LoadPdfPath(path);
-    }
-}
-
-void RenderPage(HDC dc, RECT client) {
-    RECT area = client;
-    area.top += 44;
-
-    HBRUSH bg = CreateSolidBrush(RGB(88, 88, 88));
-    FillRect(dc, &area, bg);
-    DeleteObject(bg);
-
-    if (!doc || FPDF_GetPageCount(doc) == 0) {
-        SetBkMode(dc, TRANSPARENT);
-        SetTextColor(dc, RGB(255, 255, 255));
-
-        DrawTextW(
-            dc,
-            L"Ctrl+O - Отвори PDF файл",
-            -1,
-            &area,
-            DT_CENTER | DT_VCENTER | DT_SINGLELINE
-        );
-        return;
-    }
-
-    FPDF_PAGE page = FPDF_LoadPage(doc, pageIndex);
-    if (!page) return;
-
-    double w = FPDF_GetPageWidth(page);
-    double h = FPDF_GetPageHeight(page);
-
-    if (w <= 0 || h <= 0) {
-        FPDF_ClosePage(page);
-        return;
-    }
-
-    int availableW = std::max(1L, area.right - 40L);
-    int availableH = std::max(
-        1L, area.bottom - area.top - 40L
-    );
-
-    double fit = std::min(
-        (double)availableW / w,
-        (double)availableH / h
-    );
-
-    int pw = std::max(1, (int)(w * fit * zoom));
-    int ph = std::max(1, (int)(h * fit * zoom));
-
-    int rw = std::min(
-        pw, std::max(1L, area.right - 20L)
-    );
-
-    int rh = std::min(
-        ph, std::max(1L, area.bottom - area.top - 20L)
-    );
-
-    BITMAPINFO bmi = {};
-    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-    bmi.bmiHeader.biWidth = rw;
-    bmi.bmiHeader.biHeight = -rh;
-    bmi.bmiHeader.biPlanes = 1;
-    bmi.bmiHeader.biBitCount = 32;
-    bmi.bmiHeader.biCompression = BI_RGB;
-
-    void* bits = nullptr;
-
-    HBITMAP dib = CreateDIBSection(
-        dc, &bmi, DIB_RGB_COLORS,
-        &bits, nullptr, 0
-    );
-
-    if (dib && bits) {
-        FPDF_BITMAP bitmap = FPDFBitmap_CreateEx(
-            rw, rh, FPDFBitmap_BGRx, bits, rw * 4
-        );
-
-        if (bitmap) {
-            FPDFBitmap_FillRect(
-                bitmap, 0, 0, rw, rh, 0xFFFFFFFF
-            );
-
-            FPDF_RenderPageBitmap(
-                bitmap, page,
-                0, 0, pw, ph, 0, FPDF_ANNOT
-            );
-
-            HDC mem = CreateCompatibleDC(dc);
-
-            if (mem) {
-                HGDIOBJ old = SelectObject(mem, dib);
-
-                int x = std::max(
-                    10L, (area.right - rw) / 2L
-                );
-
-                int y = area.top + std::max(
-                    10L,
-                    (area.bottom - area.top - rh) / 2L
-                );
-
-                BitBlt(
-                    dc, x, y, rw, rh,
-                    mem, 0, 0, SRCCOPY
-                );
-
-                SelectObject(mem, old);
-                DeleteDC(mem);
-            }
-
-            FPDFBitmap_Destroy(bitmap);
-        }
-
-        DeleteObject(dib);
-    }
-
-    FPDF_ClosePage(page);
-}
-
-LRESULT CALLBACK WndProc(
-    HWND hwnd, UINT msg, WPARAM wp, LPARAM lp
-) {
-    switch (msg) {
-    case WM_CREATE: {
-        const wchar_t* labels[] = {
-            L"Отвори", L"<", L">", L"+", L"-"
-        };
-
-        int ids[] = {
-            ID_OPEN, ID_PREV, ID_NEXT, ID_IN, ID_OUT
-        };
-
-        int x = 8;
-
-        for (int i = 0; i < 5; i++) {
-            int width = (i == 0) ? 100 : 50;
-
-            CreateWindowW(
-                L"BUTTON",
-                labels[i],
-                WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-                x, 7, width, 30,
-                hwnd,
-                (HMENU)(INT_PTR)ids[i],
-                GetModuleHandleW(nullptr),
-                nullptr
-            );
-
-            x += width + 5;
-        }
-        return 0;
-    }
-
-    case WM_COMMAND:
-        switch (LOWORD(wp)) {
-        case ID_OPEN:
-            OpenDocument();
-            break;
-
-        case ID_PREV:
-            if (doc && pageIndex > 0)
-                --pageIndex;
-            break;
-
-        case ID_NEXT:
-            if (doc &&
-                pageIndex + 1 < FPDF_GetPageCount(doc))
-                ++pageIndex;
-            break;
-
-        case ID_IN:
-            zoom = std::min(zoom * 1.25, 5.0);
-            break;
-
-        case ID_OUT:
-            zoom = std::max(zoom / 1.25, 0.25);
-            break;
-        }
-
-        UpdateTitle();
-        InvalidateRect(hwnd, nullptr, TRUE);
-        return 0;
-
-    case WM_KEYDOWN:
-        if (wp == VK_RIGHT || wp == VK_NEXT)
-            SendMessageW(hwnd, WM_COMMAND, ID_NEXT, 0);
-
-        if (wp == VK_LEFT || wp == VK_PRIOR)
-            SendMessageW(hwnd, WM_COMMAND, ID_PREV, 0);
-
-        return 0;
-
-    case WM_PAINT: {
-        PAINTSTRUCT ps;
-        HDC dc = BeginPaint(hwnd, &ps);
-
-        RECT r;
-        GetClientRect(hwnd, &r);
-
-        RenderPage(dc, r);
-
-        EndPaint(hwnd, &ps);
-        return 0;
-    }
-
-    case WM_DESTROY:
-        if (doc) {
-            FPDF_CloseDocument(doc);
-            doc = nullptr;
-        }
-
-        FPDF_DestroyLibrary();
-        PostQuitMessage(0);
-        return 0;
-    }
-
-    return DefWindowProcW(hwnd, msg, wp, lp);
-}
-
-int WINAPI wWinMain(
-    HINSTANCE instance,
-    HINSTANCE,
-    LPWSTR,
-    int show
-) {
-    FPDF_InitLibrary();
-
-    WNDCLASSW wc = {};
-    wc.lpfnWndProc = WndProc;
-    wc.hInstance = instance;
-    wc.lpszClassName = L"PDFReaderProWindow";
-    wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
-    wc.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
-
-    if (!RegisterClassW(&wc)) {
-        FPDF_DestroyLibrary();
-        return 1;
-    }
-
-    mainWindow = CreateWindowW(
-        wc.lpszClassName,
-        L"PDF Reader Pro",
-        WS_OVERLAPPEDWINDOW,
-        CW_USEDEFAULT,
-        CW_USEDEFAULT,
-        1000,
-        760,
-        nullptr,
-        nullptr,
-        instance,
-        nullptr
-    );
-
-    if (!mainWindow) {
-        FPDF_DestroyLibrary();
-        return 1;
-    }
-
-    ShowWindow(mainWindow, show);
-    UpdateWindow(mainWindow);
-
-    int argc = 0;
-    LPWSTR* argv = CommandLineToArgvW(
-        GetCommandLineW(), &argc
-    );
-
-    if (argv) {
-        if (argc > 1)
-            LoadPdfPath(argv[1]);
-
-        LocalFree(argv);
-    }
-
-    ACCEL acc = {};
-    acc.fVirt = FVIRTKEY | FCONTROL;
-    acc.key = 'O';
-    acc.cmd = ID_OPEN;
-
-    HACCEL accelerator = CreateAcceleratorTableW(
-        &acc, 1
-    );
-
-    MSG msg = {};
-
-    while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
-        if (!accelerator ||
-            !TranslateAcceleratorW(
-                mainWindow, accelerator, &msg
-            )) {
-            TranslateMessage(&msg);
-            DispatchMessageW(&msg);
-        }
-    }
-
-    if (accelerator)
-        DestroyAcceleratorTable(accelerator);
-
-    return (int)msg.wParam;
-}
+name: Build PDF Reader Pro
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Download source
+        uses: actions/checkout@v4
+
+      - name: Setup Visual Studio
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: amd64
+
+      - name: Download PDFium
+        shell: pwsh
+        run: |
+          $url = "https://github.com/bblanchon/pdfium-binaries/releases/latest/download/pdfium-win-x64.tgz"
+          Invoke-WebRequest -Uri $url -OutFile pdfium.tgz
+          New-Item -ItemType Directory -Force pdfium
+          tar -xzf pdfium.tgz -C pdfium
+
+      - name: Compile PDF Reader Pro
+        shell: cmd
+        run: |
+          cl /nologo /EHsc /std:c++17 /utf-8 /O2 /I pdfium\include main.cpp /Fe:PDFReaderPro.exe /link /SUBSYSTEM:WINDOWS pdfium\lib\pdfium.dll.lib user32.lib gdi32.lib comdlg32.lib shell32.lib
+
+      - name: Prepare Portable
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force Portable
+          Copy-Item PDFReaderPro.exe Portable\
+          Copy-Item pdfium\bin\pdfium.dll Portable\
+
+      - name: Upload Portable
+        uses: actions/upload-artifact@v4
+        with:
+          name: PDFReaderPro-Windows-x64
+          path: Portable/
+          if-no-files-found: error
