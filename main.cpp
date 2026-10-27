@@ -1,5 +1,6 @@
 #define UNICODE
 #define _UNICODE
+#define NOMINMAX
 #include <windows.h>
 #include <commdlg.h>
 #include <shellapi.h>
@@ -116,5 +117,5 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE,LPWSTR,int show) {
     if(argv) {if(argc>1) LoadPdfPath(argv[1]);LocalFree(argv);}
     ACCEL acc={FVIRTKEY|FCONTROL,'O',ID_OPEN};HACCEL accelerator=CreateAcceleratorTableW(&acc,1);
     MSG msg;while(GetMessageW(&msg,nullptr,0,0)>0){if(!TranslateAcceleratorW(mainWindow,accelerator,&msg)){TranslateMessage(&msg);DispatchMessageW(&msg);}}
-    DestroyAcceleratorTable(acc);return (int)msg.wParam;
+    DestroyAcceleratorTable(accelerator);return (int)msg.wParam;
 }
