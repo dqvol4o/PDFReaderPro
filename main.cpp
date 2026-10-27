@@ -52,11 +52,11 @@ void RenderPage(HDC dc, RECT client) {
     FPDF_PAGE page=FPDF_LoadPage(doc,pageIndex); if(!page) return;
     double w=FPDF_GetPageWidth(page),h=FPDF_GetPageHeight(page);
     if(w<=0||h<=0) {FPDF_ClosePage(page);return;}
-    double fit=std::min((double)std::max(1,area.right-40)/w,(double)std::max(1,area.bottom-area.top-40)/h);
+    double fit=std::min((double)std::max<LONG>(1,area.right-40)/w,(double)std::max<LONG>(1,area.bottom-area.top-40)/h);
     int pw=std::max(1,(int)(w*fit*zoom)),ph=std::max(1,(int)(h*fit*zoom));
     // Render at viewport size only: bounds memory usage for oversized pages.
-    int rw=std::min(pw,std::max(1,area.right-20));
-    int rh=std::min(ph,std::max(1,area.bottom-area.top-20));
+    int rw=std::min(pw,std::max<LONG>(1,area.right-20));
+    int rh=std::min(ph,std::max<LONG>(1,area.bottom-area.top-20));
     BITMAPINFO bmi={}; bmi.bmiHeader.biSize=sizeof(BITMAPINFOHEADER);
     bmi.bmiHeader.biWidth=rw; bmi.bmiHeader.biHeight=-rh;
     bmi.bmiHeader.biPlanes=1; bmi.bmiHeader.biBitCount=32; bmi.bmiHeader.biCompression=BI_RGB;
@@ -68,7 +68,7 @@ void RenderPage(HDC dc, RECT client) {
             FPDFBitmap_FillRect(bitmap,0,0,rw,rh,0xFFFFFFFF);
             FPDF_RenderPageBitmap(bitmap,page,0,0,pw,ph,0,FPDF_ANNOT);
             HDC mem=CreateCompatibleDC(dc); HGDIOBJ old=SelectObject(mem,dib);
-            int x=std::max(10,(area.right-rw)/2), y=area.top+std::max(10,(area.bottom-area.top-rh)/2);
+            int x=std::max<LONG>(10,(area.right-rw)/2), y=area.top+std::max<LONG>(10,(area.bottom-area.top-rh)/2);
             BitBlt(dc,x,y,rw,rh,mem,0,0,SRCCOPY);
             SelectObject(mem,old);DeleteDC(mem);
             FPDFBitmap_Destroy(bitmap);
