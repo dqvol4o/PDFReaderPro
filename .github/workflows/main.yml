@@ -1,0 +1,24 @@
+
+name: Build PDF Reader Pro
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Download source
+        uses: actions/checkout@v4
+
+      - name: Compile PDF Reader Pro
+        shell: cmd
+        run: |
+          cl /nologo /EHsc /std:c++17 /utf-8 main.cpp /Fe:PDFReaderPro.exe user32.lib gdi32.lib comdlg32.lib shell32.lib
+
+      - name: Upload EXE
+        uses: actions/upload-artifact@v4
+        with:
+          name: PDFReaderPro-Windows
+          path: PDFReaderPro.exe
